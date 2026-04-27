@@ -99,3 +99,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+.noise-tooltip-wrap {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.noise-tooltip-wrap::before {
+  display: none !important;
+}
+
+.leaflet-tooltip {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
