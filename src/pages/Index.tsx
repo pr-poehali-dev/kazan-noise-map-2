@@ -62,6 +62,8 @@ export default function Index() {
   const [selected, setSelected] = useState<Street | null>(null);
   const [showStreets, setShowStreets] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  const [streetsCollapsed, setStreetsCollapsed] = useState(false);
+  const [statsCollapsed, setStatsCollapsed] = useState(false);
 
   const filtered = district ? streets.filter(s => s.district === district) : streets;
   const avg = Math.round(filtered.reduce((a, s) => a + s.noiseLevel, 0) / filtered.length);
@@ -146,41 +148,61 @@ export default function Index() {
 
       {/* ── Панель улиц (справа) ── */}
       {showStreets && (
-        <div style={{ ...panel, top: 76, right: 16, width: 230 }}>
-          {/* Фильтр районов */}
-          <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>Район</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {[null, ...allDistricts].map(d => (
-                <button key={d ?? "all"} onClick={() => setDistrict(d)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid", fontSize: 10, cursor: "pointer", fontWeight: 500, borderColor: district === d ? "#fff" : "rgba(255,255,255,0.12)", background: district === d ? "#fff" : "transparent", color: district === d ? "#000" : "rgba(255,255,255,0.4)" }}>
-                  {d === null ? "Все" : d.split("-")[0]}
-                </button>
-              ))}
-            </div>
+        <div style={{ ...panel, top: 76, right: 16, width: streetsCollapsed ? 44 : 230, transition: "width 0.2s ease" }}>
+          {/* Заголовок с кнопкой свернуть */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: streetsCollapsed ? "10px 10px" : "10px 12px", borderBottom: streetsCollapsed ? "none" : "1px solid rgba(255,255,255,0.07)", cursor: streetsCollapsed ? "pointer" : "default" }} onClick={streetsCollapsed ? () => setStreetsCollapsed(false) : undefined}>
+            {streetsCollapsed ? (
+              <span title="Развернуть улицы" style={{ fontSize: 18, lineHeight: 1 }}>📋</span>
+            ) : (
+              <>
+                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 500 }}>📋 Улицы</span>
+                <button onClick={() => setStreetsCollapsed(true)} title="Свернуть" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>⟩</button>
+              </>
+            )}
           </div>
-          {/* Список */}
-          <div style={{ overflowY: "auto", maxHeight: 360 }}>
-            {filtered.sort((a, b) => b.noiseLevel - a.noiseLevel).map(s => (
-              <div key={s.id} onClick={() => setSelected(selected?.id === s.id ? null : s)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", background: selected?.id === s.id ? "rgba(255,255,255,0.07)" : "transparent", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: getColor(s.noiseLevel), flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 12, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
-                <span style={{ fontFamily: "monospace", fontSize: 12, color: getColor(s.noiseLevel), fontWeight: 600 }}>{s.noiseLevel}</span>
+          {/* Содержимое */}
+          {!streetsCollapsed && (
+            <>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>Район</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {[null, ...allDistricts].map(d => (
+                    <button key={d ?? "all"} onClick={() => setDistrict(d)} style={{ padding: "2px 8px", borderRadius: 4, border: "1px solid", fontSize: 10, cursor: "pointer", fontWeight: 500, borderColor: district === d ? "#fff" : "rgba(255,255,255,0.12)", background: district === d ? "#fff" : "transparent", color: district === d ? "#000" : "rgba(255,255,255,0.4)" }}>
+                      {d === null ? "Все" : d.split("-")[0]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+              <div style={{ overflowY: "auto", maxHeight: 360 }}>
+                {filtered.sort((a, b) => b.noiseLevel - a.noiseLevel).map(s => (
+                  <div key={s.id} onClick={() => setSelected(selected?.id === s.id ? null : s)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", background: selected?.id === s.id ? "rgba(255,255,255,0.07)" : "transparent", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: getColor(s.noiseLevel), flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 12, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: getColor(s.noiseLevel), fontWeight: 600 }}>{s.noiseLevel}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {/* ── Панель статистики (справа, ниже улиц) ── */}
       {showStats && (
-        <div style={{ ...panel, top: showStreets ? 76 : 76, right: showStreets ? 262 : 16, width: 280, maxHeight: "calc(100vh - 100px)", overflowY: "auto" }}>
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontWeight: 600, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            Статистика
-            <button onClick={() => setShowStats(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
+        <div style={{ ...panel, top: 76, right: showStreets ? (streetsCollapsed ? 72 : 262) : 16, width: statsCollapsed ? 44 : 280, maxHeight: statsCollapsed ? "auto" : "calc(100vh - 100px)", overflowY: statsCollapsed ? "visible" : "auto", transition: "width 0.2s ease, right 0.2s ease" }}>
+          <div style={{ padding: "10px 14px", borderBottom: statsCollapsed ? "none" : "1px solid rgba(255,255,255,0.07)", fontWeight: 600, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: statsCollapsed ? "pointer" : "default" }} onClick={statsCollapsed ? () => setStatsCollapsed(false) : undefined}>
+            {statsCollapsed ? (
+              <span title="Развернуть статистику" style={{ fontSize: 18, lineHeight: 1 }}>📊</span>
+            ) : (
+              <>
+                <span>📊 Статистика</span>
+                <button onClick={() => setStatsCollapsed(true)} title="Свернуть" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>⟩</button>
+              </>
+            )}
           </div>
 
-          {/* Сводка */}
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          {/* Содержимое статистики */}
+          {!statsCollapsed && <><div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
               {[
                 { c: norm, col: "#22c55e", bg: "rgba(34,197,94,0.1)", label: "Норма" },
@@ -228,6 +250,7 @@ export default function Index() {
               </div>
             ))}
           </div>
+          </>}
         </div>
       )}
 
