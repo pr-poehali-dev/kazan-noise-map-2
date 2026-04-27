@@ -1,369 +1,275 @@
-import { useState, useEffect, useRef } from "react";
-import L from "leaflet";
-import { streets, getNoiseColor, getNoiseWeight, getNoiseLabel, districts, type Street } from "@/data/noiseData";
-import Icon from "@/components/ui/icon";
-import "leaflet/dist/leaflet.css";
+import { useState } from "react";
 
-const KAZAN_CENTER: [number, number] = [55.796, 49.106];
+interface Street {
+  id: number;
+  name: string;
+  district: string;
+  noiseLevel: number;
+  type: string;
+}
+
+const streets: Street[] = [
+  { id: 1, name: "пр. Победы", district: "Вахитовский", noiseLevel: 82, type: "Магистраль" },
+  { id: 2, name: "пр. Ямашева", district: "Ново-Савиновский", noiseLevel: 85, type: "Магистраль" },
+  { id: 3, name: "ул. Дементьева", district: "Авиастроительный", noiseLevel: 88, type: "Промышленная" },
+  { id: 4, name: "ул. Сибирский тракт", district: "Ново-Савиновский", noiseLevel: 87, type: "Магистраль" },
+  { id: 5, name: "ул. Магистральная", district: "Кировский", noiseLevel: 86, type: "Магистраль" },
+  { id: 6, name: "ул. Копылова", district: "Авиастроительный", noiseLevel: 84, type: "Промышленная" },
+  { id: 7, name: "ул. Тэцевская", district: "Московский", noiseLevel: 83, type: "Промышленная" },
+  { id: 8, name: "пр. Амирхана", district: "Ново-Савиновский", noiseLevel: 80, type: "Магистраль" },
+  { id: 9, name: "ул. Складская", district: "Кировский", noiseLevel: 81, type: "Промышленная" },
+  { id: 10, name: "ул. Кремлёвская", district: "Вахитовский", noiseLevel: 78, type: "Артерия" },
+  { id: 11, name: "ул. Гагарина", district: "Советский", noiseLevel: 79, type: "Артерия" },
+  { id: 12, name: "ул. Восстания", district: "Московский", noiseLevel: 77, type: "Артерия" },
+  { id: 13, name: "ул. Адоратского", district: "Ново-Савиновский", noiseLevel: 76, type: "Артерия" },
+  { id: 14, name: "ул. Баумана", district: "Вахитовский", noiseLevel: 72, type: "Артерия" },
+  { id: 15, name: "ул. Чистопольская", district: "Ново-Савиновский", noiseLevel: 74, type: "Артерия" },
+  { id: 16, name: "ул. Фатыха Амирхана", district: "Приволжский", noiseLevel: 73, type: "Артерия" },
+  { id: 17, name: "ул. Побежимова", district: "Авиастроительный", noiseLevel: 71, type: "Артерия" },
+  { id: 18, name: "ул. Закиева", district: "Московский", noiseLevel: 69, type: "Жилая" },
+  { id: 19, name: "ул. Декабристов", district: "Советский", noiseLevel: 68, type: "Жилая" },
+  { id: 20, name: "ул. Хади Такташа", district: "Ново-Савиновский", noiseLevel: 66, type: "Жилая" },
+  { id: 21, name: "ул. Карла Маркса", district: "Вахитовский", noiseLevel: 70, type: "Артерия" },
+  { id: 22, name: "ул. Пушкина", district: "Вахитовский", noiseLevel: 65, type: "Жилая" },
+  { id: 23, name: "ул. Химиков", district: "Московский", noiseLevel: 64, type: "Жилая" },
+  { id: 24, name: "ул. Правобулачная", district: "Вахитовский", noiseLevel: 63, type: "Жилая" },
+  { id: 25, name: "ул. Маяковского", district: "Ново-Савиновский", noiseLevel: 59, type: "Жилая" },
+  { id: 26, name: "ул. Родина", district: "Приволжский", noiseLevel: 58, type: "Жилая" },
+  { id: 27, name: "ул. Миля", district: "Приволжский", noiseLevel: 61, type: "Жилая" },
+  { id: 28, name: "ул. Чехова", district: "Советский", noiseLevel: 60, type: "Жилая" },
+  { id: 29, name: "ул. Островского", district: "Вахитовский", noiseLevel: 62, type: "Жилая" },
+  { id: 30, name: "ул. Лесгафта", district: "Кировский", noiseLevel: 55, type: "Жилая" },
+];
+
+const getColor = (lvl: number) => lvl >= 75 ? "#ef4444" : lvl >= 65 ? "#eab308" : "#22c55e";
+const getLabel = (lvl: number) => lvl >= 75 ? "Критично" : lvl >= 65 ? "Превышение" : "Норма";
+const districts = [...new Set(streets.map(s => s.district))];
 
 export default function Index() {
-  const mapRef = useRef<L.Map | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const polylinesRef = useRef<L.Polyline[]>([]);
+  const [tab, setTab] = useState<"map" | "stats">("map");
+  const [district, setDistrict] = useState<string | null>(null);
   const [selected, setSelected] = useState<Street | null>(null);
-  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"map" | "stats">("map");
 
-  // Инициализация карты
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: KAZAN_CENTER,
-      zoom: 12,
-      zoomControl: false,
-    });
-
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; CARTO",
-    }).addTo(map);
-
-    L.control.zoom({ position: "bottomright" }).addTo(map);
-
-    mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  // Рисуем линии на карте
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Удаляем старые
-    polylinesRef.current.forEach(p => p.remove());
-    polylinesRef.current = [];
-
-    const filtered = selectedDistrict
-      ? streets.filter(s => s.district === selectedDistrict)
-      : streets;
-
-    filtered.forEach(street => {
-      const color = getNoiseColor(street.noiseLevel);
-      const weight = getNoiseWeight(street.noiseLevel);
-
-      const line = L.polyline(street.coords, {
-        color,
-        weight,
-        opacity: 0.85,
-      }).addTo(map);
-
-      line.bindTooltip(
-        `<div style="font-family: IBM Plex Mono, monospace; font-size: 11px; background: #1a1a1a; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 10px; color: #fff; white-space: nowrap;">
-          <div style="font-family: IBM Plex Sans, sans-serif; font-weight: 500; margin-bottom: 2px;">${street.name}</div>
-          <div style="color: ${color}">${street.noiseLevel} дБ · ${getNoiseLabel(street.noiseLevel)}</div>
-        </div>`,
-        { sticky: true, className: "noise-tooltip-wrap" }
-      );
-
-      line.on("click", () => setSelected(street));
-      line.on("mouseover", () => line.setStyle({ opacity: 1, weight: weight + 2 }));
-      line.on("mouseout", () => line.setStyle({ opacity: 0.85, weight }));
-
-      polylinesRef.current.push(line);
-    });
-  }, [selectedDistrict, mapRef.current]);
-
-  const filtered = selectedDistrict
-    ? streets.filter(s => s.district === selectedDistrict)
-    : streets;
-
-  const avg = Math.round(filtered.reduce((acc, s) => acc + s.noiseLevel, 0) / filtered.length);
-  const max = Math.max(...filtered.map(s => s.noiseLevel));
-  const min = Math.min(...filtered.map(s => s.noiseLevel));
+  const filtered = district ? streets.filter(s => s.district === district) : streets;
+  const avg = Math.round(filtered.reduce((a, s) => a + s.noiseLevel, 0) / filtered.length);
   const critical = filtered.filter(s => s.noiseLevel >= 75).length;
-  const warning = filtered.filter(s => s.noiseLevel >= 65 && s.noiseLevel < 75).length;
-  const normal = filtered.filter(s => s.noiseLevel < 65).length;
+  const warn = filtered.filter(s => s.noiseLevel >= 65 && s.noiseLevel < 75).length;
+  const norm = filtered.filter(s => s.noiseLevel < 65).length;
 
-  const districtStats = districts.map(d => {
-    const dStreets = streets.filter(s => s.district === d);
-    return {
-      name: d,
-      avg: Math.round(dStreets.reduce((acc, s) => acc + s.noiseLevel, 0) / dStreets.length),
-      count: dStreets.length,
-    };
+  const distStats = districts.map(d => {
+    const ds = streets.filter(s => s.district === d);
+    return { name: d, avg: Math.round(ds.reduce((a, s) => a + s.noiseLevel, 0) / ds.length), count: ds.length };
   }).sort((a, b) => b.avg - a.avg);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#0f0f0f] font-ibm overflow-hidden">
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#0f0f0f", fontFamily: "'IBM Plex Sans', sans-serif", color: "#fff" }}>
+
       {/* Хедер */}
-      <header className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-white/8 bg-[#0f0f0f]/95 backdrop-blur z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-green-500 via-yellow-400 to-red-500 flex items-center justify-center">
-            <Icon name="Volume2" size={14} className="text-white" />
-          </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #22c55e, #eab308, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🔊</div>
           <div>
-            <h1 className="text-white font-medium text-sm tracking-wide leading-none">Шумовое загрязнение</h1>
-            <p className="text-white/30 text-[11px] font-mono mt-0.5">Казань · 2024</p>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Шумовое загрязнение Казани</div>
+            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace" }}>30 улиц · 7 районов</div>
           </div>
         </div>
-
-        <div className="flex bg-white/5 rounded-lg p-0.5 gap-0.5">
-          <button
-            onClick={() => setActiveTab("map")}
-            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === "map" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"}`}
-          >
-            Карта
-          </button>
-          <button
-            onClick={() => setActiveTab("stats")}
-            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === "stats" ? "bg-white/15 text-white" : "text-white/40 hover:text-white/70"}`}
-          >
-            Статистика
-          </button>
+        <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3 }}>
+          {(["map", "stats"] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: "6px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, background: tab === t ? "rgba(255,255,255,0.15)" : "transparent", color: tab === t ? "#fff" : "rgba(255,255,255,0.4)" }}>
+              {t === "map" ? "Карта" : "Статистика"}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="text-white/20 text-xs font-mono">{streets.length} улиц</div>
-      </header>
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
 
-      <div className="flex-1 flex min-h-0">
         {/* Боковая панель */}
-        <aside className="w-72 flex-shrink-0 border-r border-white/8 bg-[#111111] flex flex-col overflow-y-auto">
+        <div style={{ width: 260, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.08)", background: "#111", display: "flex", flexDirection: "column", overflowY: "auto" }}>
 
-          {/* Фильтр районов */}
-          <div className="p-4 border-b border-white/8">
-            <p className="text-white/30 text-[10px] font-mono uppercase tracking-widest mb-3">Район</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setSelectedDistrict(null)}
-                className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all border ${!selectedDistrict ? "bg-white text-black border-white" : "border-white/10 text-white/40 hover:text-white/70 hover:border-white/20"}`}
-              >
-                Все
-              </button>
-              {districts.map(d => (
-                <button
-                  key={d}
-                  onClick={() => setSelectedDistrict(d === selectedDistrict ? null : d)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all border ${selectedDistrict === d ? "bg-white text-black border-white" : "border-white/10 text-white/40 hover:text-white/70 hover:border-white/20"}`}
-                >
-                  {d.split("-")[0]}
+          {/* Фильтр */}
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Район</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {[null, ...districts].map(d => (
+                <button key={d ?? "all"} onClick={() => setDistrict(d)} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid", fontSize: 11, cursor: "pointer", fontWeight: 500, borderColor: district === d ? "#fff" : "rgba(255,255,255,0.12)", background: district === d ? "#fff" : "transparent", color: district === d ? "#000" : "rgba(255,255,255,0.4)" }}>
+                  {d === null ? "Все" : d.split("-")[0]}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Сводка */}
-          <div className="p-4 border-b border-white/8">
-            <p className="text-white/30 text-[10px] font-mono uppercase tracking-widest mb-3">Сводка</p>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2.5 text-center">
-                <div className="text-green-400 text-lg font-mono font-medium">{normal}</div>
-                <div className="text-green-500/60 text-[10px] mt-0.5">Норма</div>
-              </div>
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2.5 text-center">
-                <div className="text-yellow-400 text-lg font-mono font-medium">{warning}</div>
-                <div className="text-yellow-500/60 text-[10px] mt-0.5">Превышение</div>
-              </div>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
-                <div className="text-red-400 text-lg font-mono font-medium">{critical}</div>
-                <div className="text-red-500/60 text-[10px] mt-0.5">Критично</div>
-              </div>
+          {/* Счётчики */}
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Сводка</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+              {[
+                { c: norm, col: "#22c55e", bg: "rgba(34,197,94,0.1)", label: "Норма" },
+                { c: warn, col: "#eab308", bg: "rgba(234,179,8,0.1)", label: "Превышение" },
+                { c: critical, col: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "Критично" }
+              ].map(item => (
+                <div key={item.label} style={{ background: item.bg, borderRadius: 8, padding: "8px 6px", textAlign: "center", border: `1px solid ${item.col}30` }}>
+                  <div style={{ color: item.col, fontSize: 20, fontFamily: "monospace", fontWeight: 600 }}>{item.c}</div>
+                  <div style={{ color: `${item.col}80`, fontSize: 10, marginTop: 2 }}>{item.label}</div>
+                </div>
+              ))}
             </div>
-            <div className="mt-3 flex items-center justify-between bg-white/3 rounded-lg px-3 py-2">
-              <span className="text-white/30 text-xs">Средний уровень</span>
-              <span className="text-white font-mono text-sm font-medium">{avg} дБ</span>
+            <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px" }}>
+              <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>Средний уровень</span>
+              <span style={{ fontFamily: "monospace", fontWeight: 600, fontSize: 13 }}>{avg} дБ</span>
             </div>
           </div>
 
           {/* Легенда */}
-          <div className="p-4 border-b border-white/8">
-            <p className="text-white/30 text-[10px] font-mono uppercase tracking-widest mb-3">Шкала шума</p>
-            <div className="space-y-2">
-              {[
-                { color: "#22c55e", label: "Норма", range: "< 65 дБ", desc: "Тихие улицы" },
-                { color: "#eab308", label: "Превышение", range: "65–74 дБ", desc: "Допустимый предел" },
-                { color: "#ef4444", label: "Критично", range: "≥ 75 дБ", desc: "Выше нормы" },
-              ].map(item => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <div className="w-8 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/70 text-xs">{item.label}</span>
-                      <span className="text-white/30 text-[10px] font-mono">{item.range}</span>
-                    </div>
-                    <div className="text-white/20 text-[10px]">{item.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Шкала</div>
+            {[
+              { col: "#22c55e", label: "Норма", range: "< 65 дБ" },
+              { col: "#eab308", label: "Превышение", range: "65–74 дБ" },
+              { col: "#ef4444", label: "Критично", range: "≥ 75 дБ" }
+            ].map(item => (
+              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <div style={{ width: 28, height: 4, borderRadius: 2, background: item.col, flexShrink: 0 }} />
+                <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{item.label}</span>
+                <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontFamily: "monospace", marginLeft: "auto" }}>{item.range}</span>
+              </div>
+            ))}
           </div>
 
           {/* Выбранная улица */}
           {selected && (
-            <div className="p-4">
-              <p className="text-white/30 text-[10px] font-mono uppercase tracking-widest mb-3">Выбрана улица</p>
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <h3 className="text-white font-medium text-sm leading-tight">{selected.name}</h3>
-                  <button onClick={() => setSelected(null)} className="text-white/20 hover:text-white/50 flex-shrink-0">
-                    <Icon name="X" size={14} />
-                  </button>
+            <div style={{ padding: "12px 16px" }}>
+              <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Выбрана улица</div>
+              <div style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontWeight: 500, fontSize: 13 }}>{selected.name}</span>
+                  <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
                 </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: getNoiseColor(selected.noiseLevel) }} />
-                  <span className="font-mono text-2xl font-medium" style={{ color: getNoiseColor(selected.noiseLevel) }}>{selected.noiseLevel}</span>
-                  <span className="text-white/30 text-sm">дБ</span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 10 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: getColor(selected.noiseLevel), flexShrink: 0 }} />
+                  <span style={{ color: getColor(selected.noiseLevel), fontFamily: "monospace", fontSize: 28, fontWeight: 600 }}>{selected.noiseLevel}</span>
+                  <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>дБ</span>
                 </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-white/30">Статус</span>
-                    <span style={{ color: getNoiseColor(selected.noiseLevel) }}>{getNoiseLabel(selected.noiseLevel)}</span>
+                {([["Статус", getLabel(selected.noiseLevel), getColor(selected.noiseLevel)], ["Район", selected.district, "rgba(255,255,255,0.6)"], ["Тип", selected.type, "rgba(255,255,255,0.6)"]] as [string, string, string][]).map(([k, v, c]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>{k}</span>
+                    <span style={{ color: c, fontSize: 12 }}>{v}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/30">Район</span>
-                    <span className="text-white/60">{selected.district}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/30">Тип</span>
-                    <span className="text-white/60">
-                      {selected.type === "highway" ? "Магистраль" : selected.type === "arterial" ? "Артерия" : selected.type === "industrial" ? "Промышленная" : "Жилая"}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, (selected.noiseLevel - 40) / 60 * 100)}%`, backgroundColor: getNoiseColor(selected.noiseLevel) }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-white/20 mt-1 font-mono">
-                    <span>40</span><span>70</span><span>100 дБ</span>
-                  </div>
+                ))}
+                <div style={{ marginTop: 10, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.min(100, (selected.noiseLevel - 40) / 60 * 100)}%`, background: getColor(selected.noiseLevel), borderRadius: 2 }} />
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex-1" />
-
-          <div className="p-4 border-t border-white/8">
-            <div className="flex items-start gap-2">
-              <Icon name="Info" size={12} className="text-white/20 flex-shrink-0 mt-0.5" />
-              <p className="text-white/20 text-[10px] leading-relaxed">
-                Норматив ВОЗ: 55 дБ днём, 45 дБ ночью. Данные — расчётные, на основе транспортной нагрузки.
-              </p>
-            </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.2)", fontSize: 10, lineHeight: 1.5 }}>
+            Норматив ВОЗ: 55 дБ днём, 45 дБ ночью. Данные расчётные.
           </div>
-        </aside>
+        </div>
 
-        {/* Основная область */}
-        <main className="flex-1 relative min-w-0">
-          {/* Карта — всегда в DOM, скрываем через CSS */}
-          <div
-            ref={mapContainerRef}
-            style={{ display: activeTab === "map" ? "block" : "none" }}
-            className="absolute inset-0 w-full h-full"
-          />
+        {/* Контент */}
+        <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
+          {tab === "map" ? (
+            <>
+              <iframe
+                src="https://www.openstreetmap.org/export/embed.html?bbox=48.9500%2C55.7300%2C49.2800%2C55.8500&layer=mapnik"
+                style={{ width: "100%", height: "100%", border: "none", filter: "invert(90%) hue-rotate(180deg)" }}
+                title="Карта Казани"
+              />
 
-          {/* Мини-легенда поверх карты */}
-          {activeTab === "map" && (
-            <div className="absolute bottom-6 right-6 z-[1000] bg-[#111]/90 backdrop-blur border border-white/10 rounded-xl px-4 py-3">
-              <div className="flex items-center gap-4">
-                {[
-                  { color: "#22c55e", label: "Норма" },
-                  { color: "#eab308", label: "Превышение" },
-                  { color: "#ef4444", label: "Критично" },
-                ].map(item => (
-                  <div key={item.label} className="flex items-center gap-1.5">
-                    <div className="w-6 h-1 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-white/50 text-[11px]">{item.label}</span>
+              {/* Список улиц поверх карты */}
+              <div style={{ position: "absolute", top: 16, right: 16, width: 240, maxHeight: "calc(100% - 80px)", background: "rgba(10,10,10,0.92)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, overflow: "hidden", zIndex: 10 }}>
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: 2 }}>
+                  Улицы — нажмите для деталей
+                </div>
+                <div style={{ overflowY: "auto", maxHeight: 420 }}>
+                  {filtered.sort((a, b) => b.noiseLevel - a.noiseLevel).map(s => (
+                    <div key={s.id} onClick={() => setSelected(selected?.id === s.id ? null : s)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", background: selected?.id === s.id ? "rgba(255,255,255,0.06)" : "transparent", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: getColor(s.noiseLevel), flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 12, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 12, color: getColor(s.noiseLevel), fontWeight: 600, flexShrink: 0 }}>{s.noiseLevel}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Легенда снизу */}
+              <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "rgba(10,10,10,0.9)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "8px 16px", display: "flex", gap: 20, zIndex: 10 }}>
+                {[{ col: "#22c55e", label: "Норма" }, { col: "#eab308", label: "Превышение" }, { col: "#ef4444", label: "Критично" }].map(item => (
+                  <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 20, height: 3, borderRadius: 2, background: item.col }} />
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{item.label}</span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Статистика */}
-          {activeTab === "stats" && (
-            <div className="absolute inset-0 overflow-y-auto p-6 bg-[#0f0f0f]">
-              <div className="max-w-3xl mx-auto space-y-6">
-                <div>
-                  <h2 className="text-white font-medium text-lg mb-1">Статистика шумового загрязнения</h2>
-                  <p className="text-white/30 text-sm">Сравнение районов и улиц по уровню шума</p>
+            </>
+          ) : (
+            <div style={{ height: "100%", overflowY: "auto", padding: 24, background: "#0f0f0f" }}>
+              <div style={{ maxWidth: 720, margin: "0 auto" }}>
+                <div style={{ marginBottom: 24 }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: "#fff" }}>Статистика шумового загрязнения</h2>
+                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 4 }}>Сравнение районов и улиц по уровню шума</p>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
                   {[
-                    { label: "Макс. шум", value: `${max} дБ`, icon: "TrendingUp" as const, color: "#ef4444" },
-                    { label: "Мин. шум", value: `${min} дБ`, icon: "TrendingDown" as const, color: "#22c55e" },
-                    { label: "Средний", value: `${avg} дБ`, icon: "BarChart2" as const, color: "#eab308" },
-                    { label: "Критичных", value: `${critical} улиц`, icon: "AlertTriangle" as const, color: "#ef4444" },
-                  ].map(card => (
-                    <div key={card.label} className="bg-white/3 border border-white/8 rounded-xl p-4">
-                      <Icon name={card.icon} size={16} className="mb-3" style={{ color: card.color }} />
-                      <div className="text-white font-mono text-xl font-medium">{card.value}</div>
-                      <div className="text-white/30 text-xs mt-1">{card.label}</div>
+                    { label: "Макс. шум", value: `${Math.max(...filtered.map(s => s.noiseLevel))} дБ`, col: "#ef4444" },
+                    { label: "Мин. шум", value: `${Math.min(...filtered.map(s => s.noiseLevel))} дБ`, col: "#22c55e" },
+                    { label: "Средний", value: `${avg} дБ`, col: "#eab308" },
+                    { label: "Критичных", value: `${critical} ул.`, col: "#ef4444" },
+                  ].map(c => (
+                    <div key={c.label} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 16 }}>
+                      <div style={{ color: c.col, fontFamily: "monospace", fontSize: 22, fontWeight: 600 }}>{c.value}</div>
+                      <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 4 }}>{c.label}</div>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-white/3 border border-white/8 rounded-xl p-5">
-                  <h3 className="text-white font-medium text-sm mb-4">Районы по уровню шума</h3>
-                  <div className="space-y-3">
-                    {districtStats.map((d, i) => (
-                      <div key={d.name} className="flex items-center gap-4">
-                        <div className="w-5 text-white/20 text-xs font-mono text-right">{i + 1}</div>
-                        <div className="w-36 text-white/60 text-sm truncate">{d.name}</div>
-                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${(d.avg - 40) / 60 * 100}%`, backgroundColor: getNoiseColor(d.avg) }} />
-                        </div>
-                        <div className="w-16 font-mono text-sm text-right" style={{ color: getNoiseColor(d.avg) }}>{d.avg} дБ</div>
-                        <div className="w-16 text-white/20 text-xs font-mono">{d.count} ул.</div>
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 16, color: "#fff" }}>Районы по уровню шума</div>
+                  {distStats.map((d, i) => (
+                    <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                      <span style={{ color: "rgba(255,255,255,0.2)", fontFamily: "monospace", fontSize: 12, width: 20, textAlign: "right" }}>{i + 1}</span>
+                      <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, width: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+                      <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${(d.avg - 40) / 60 * 100}%`, background: getColor(d.avg), borderRadius: 2 }} />
                       </div>
-                    ))}
-                  </div>
+                      <span style={{ color: getColor(d.avg), fontFamily: "monospace", fontSize: 13, width: 52, textAlign: "right" }}>{d.avg} дБ</span>
+                      <span style={{ color: "rgba(255,255,255,0.2)", fontFamily: "monospace", fontSize: 11, width: 40 }}>{d.count} ул.</span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="bg-white/3 border border-white/8 rounded-xl p-5">
-                  <h3 className="text-white font-medium text-sm mb-4">Топ-10 самых шумных улиц</h3>
-                  <div className="space-y-2">
-                    {[...streets].sort((a, b) => b.noiseLevel - a.noiseLevel).slice(0, 10).map((s, i) => (
-                      <div key={s.id} className="flex items-center gap-4 py-2 border-b border-white/5 last:border-0">
-                        <div className="w-5 text-white/20 text-xs font-mono text-right">{i + 1}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-white/80 text-sm truncate">{s.name}</div>
-                          <div className="text-white/25 text-[11px]">{s.district}</div>
-                        </div>
-                        <div className="px-2 py-0.5 rounded text-[11px] font-medium" style={{ backgroundColor: `${getNoiseColor(s.noiseLevel)}18`, color: getNoiseColor(s.noiseLevel) }}>
-                          {getNoiseLabel(s.noiseLevel)}
-                        </div>
-                        <div className="font-mono text-sm font-medium w-14 text-right" style={{ color: getNoiseColor(s.noiseLevel) }}>{s.noiseLevel} дБ</div>
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 16, color: "#fff" }}>Топ-10 шумных улиц</div>
+                  {[...streets].sort((a, b) => b.noiseLevel - a.noiseLevel).slice(0, 10).map((s, i) => (
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: i < 9 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                      <span style={{ color: "rgba(255,255,255,0.2)", fontFamily: "monospace", fontSize: 12, width: 20, textAlign: "right" }}>{i + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>{s.name}</div>
+                        <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>{s.district}</div>
                       </div>
-                    ))}
-                  </div>
+                      <span style={{ background: `${getColor(s.noiseLevel)}20`, color: getColor(s.noiseLevel), fontSize: 11, padding: "2px 8px", borderRadius: 4 }}>{getLabel(s.noiseLevel)}</span>
+                      <span style={{ color: getColor(s.noiseLevel), fontFamily: "monospace", fontSize: 14, fontWeight: 600, width: 52, textAlign: "right" }}>{s.noiseLevel} дБ</span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="bg-white/3 border border-white/8 rounded-xl p-5">
-                  <h3 className="text-white font-medium text-sm mb-4">Распределение по статусу</h3>
-                  <div className="flex gap-0.5 h-4 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500" style={{ width: `${normal / streets.length * 100}%` }} />
-                    <div className="h-full bg-yellow-500" style={{ width: `${warning / streets.length * 100}%` }} />
-                    <div className="h-full bg-red-500" style={{ width: `${critical / streets.length * 100}%` }} />
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 20 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 12, color: "#fff" }}>Распределение</div>
+                  <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", gap: 2 }}>
+                    <div style={{ flex: norm, background: "#22c55e" }} />
+                    <div style={{ flex: warn, background: "#eab308" }} />
+                    <div style={{ flex: critical, background: "#ef4444" }} />
                   </div>
-                  <div className="flex gap-6 mt-3">
-                    {[
-                      { label: "Норма", count: normal, color: "#22c55e" },
-                      { label: "Превышение", count: warning, color: "#eab308" },
-                      { label: "Критично", count: critical, color: "#ef4444" },
-                    ].map(item => (
-                      <div key={item.label} className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-white/40 text-xs">{item.label}</span>
-                        <span className="text-white/60 text-xs font-mono">{item.count}</span>
+                  <div style={{ display: "flex", gap: 20, marginTop: 10 }}>
+                    {[{ label: "Норма", count: norm, col: "#22c55e" }, { label: "Превышение", count: warn, col: "#eab308" }, { label: "Критично", count: critical, col: "#ef4444" }].map(item => (
+                      <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.col }} />
+                        <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>{item.label}</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)", fontFamily: "monospace", fontSize: 12 }}>{item.count}</span>
                       </div>
                     ))}
                   </div>
@@ -371,7 +277,7 @@ export default function Index() {
               </div>
             </div>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );
